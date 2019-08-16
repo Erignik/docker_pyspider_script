@@ -1,0 +1,73 @@
+version: '2'
+services:
+  phantomjs:
+    image: 'binux/pyspider:latest'
+    command: phantomjs
+    cpu_shares: 256
+    environment:
+      - 'EXCLUDE_PORTS=5000,23333,24444'
+    expose:
+      - '25555'
+    mem_limit: 256m
+    restart: always
+
+  phantomjs-lb:
+    image: 'dockercloud/haproxy:latest'
+    links:
+      - phantomjs
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock 
+    restart: always
+
+  fetcher:
+    image: 'binux/pyspider:latest'
+    command: '--message-queue "redis://redis_ip:redis_port/0" --phantomjs-proxy "phantomjs:80" fetcher --xmlrpc'
+    cpu_shares: 256
+    environment:
+      - 'EXCLUDE_PORTS=5000,25555,23333'
+    links:
+      - 'phantomjs-lb:phantomjs'
+    mem_limit: 256m
+    restart: always
+
+  fetcher-lb:
+    image: 'dockercloud/haproxy:latest'
+    links:
+      - fetcher
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  
+    restart: always
+    
+  processor:
+    image: 'binux/pyspider:latest'
+    command: '--projectdb "mysql+projectdb://root:mysql_password@mysql_ip:mysql_port/projectdb" --message-queue "redis://redis_ip:redis_port/0" processor'
+    cpu_shares: 256
+    volumes:
+      - pyspider_collect_data:/opt/pyspider/data
+    mem_limit: 256m
+    restart: always
+ 
+  result-worker:
+    image: 'binux/pyspider:latest'
+    command: '--taskdb "mysql+taskdb://root:mysql_password@mysql_ip:mysql_port/taskdb"  --projectdb "mysql+projectdb://root:mysql_password@mysql_ip:mysql_port/projectdb" --resultdb "mysql+resultdb://root:mysql_password@mysql_ip:mysql_port/resultdb" --message-queue "redis://redis_ip:redis_port/0" result_worker'
+    cpu_shares: 256
+    mem_limit: 256m
+    restart: always
+    
+  webui:
+    image: 'binux/pyspider:latest'
+    command: '--taskdb "mysql+taskdb://root:mysql_password@mysql_ip:mysql_port/taskdb"  --projectdb "mysql+projectdb://root:mysql_password@mysql_ip:mysql_port/projectdb" --resultdb "mysql+resultdb://root:mysql_password@mysql_ip:mysql_port/resultdb" --message-queue "redis://redis_ip:redis_port/0" webui --max-rate 0.3 --max-burst 3 --scheduler-rpc "http://172.19.0.2:scheduler_port/" --fetcher-rpc "http://fetcher/"'
+    cpu_shares: 256
+    environment:
+      - 'EXCLUDE_PORTS=24444,25555,23333'
+    ports:
+      - '5000:5000'
+    links:
+      - 'fetcher-lb:fetcher'
+    mem_limit: 256m
+    restart: always
+
+networks:
+  default:
+    external:
+      name: pyspider
