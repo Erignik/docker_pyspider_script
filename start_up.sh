@@ -63,6 +63,7 @@ else
     echo "has scheduler"
 fi
 
+scheduler_ip=`docker inspect scheduler | grep '"IPAddress": "172.' | sed 's/.*IPAddress.*"\([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*\).*/\1/g'`
 docker ps | grep processor
 if [ $? -ne 0 ] ;then
     echo "do not start processor, create processor"
@@ -75,6 +76,7 @@ if [ $? -ne 0 ] ;then
     eval sed -i s/redis_ip/$redis_ip/g pyspider.yml
     eval sed -i s/mysql_ip/$mysql_ip/g pyspider.yml
     eval sed -i s#pyspider_collect_data#$pyspider_collect_data#g pyspider.yml
+    eval sed -i s/scheduler_ip/$scheduler_ip/g pyspider.yml
     docker-compose -f pyspider.yml up -d
 else
     echo "has processor"
